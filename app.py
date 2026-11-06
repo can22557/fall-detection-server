@@ -1,12 +1,14 @@
 import os
-from flask import Flask, request, redirect, url_for, render_template_string, send_from_directory
+from flask import Flask, request, redirect, url_for, render_template_string, jsonify, send_from_directory
 
 app = Flask(__name__)
 
+# ตั้งค่าโฟลเดอร์สำหรับเก็บรูปภาพที่อัปโหลด
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+# HTML หน้าตาเว็บพร้อมฟอร์มเลือกไฟล์อัปโหลด
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html>
@@ -26,6 +28,7 @@ HTML_TEMPLATE = '''
     <div class="container">
         <h2>Fall Detection Server is Running!</h2>
         
+        <!-- ฟอร์มเลือกรูปภาพจากคอม/มือถือ -->
         <form action="/upload" method="post" enctype="multipart/form-data">
             <input type="file" name="file" accept="image/*" required>
             <br>
@@ -62,9 +65,26 @@ def upload_file():
         file.save(filepath)
         return redirect(url_for('index'))
 
+# ส่งไฟล์รูปภาพให้อ่านผ่าน URL
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# API สำหรับให้ Raspberry Pi 5 ดึงรายชื่อภาพ
+@app.route('/api/images')
+def get_images_api():
+    files = os.listdir(app.config['UPLOAD_FOLDER'])
+    image_urls = [f"/uploads/{f}" for f in files]
+    return jsonify({"images": image_urls})
+
+# API สำหรับให้ Raspberry Pi 5 สั่งลบรูปภาพหลังจากแจ้งเตือนเสร็จ
+@app.route('/delete/<filename>', methods=['POST'])
+def delete_file(filename):
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        return jsonify({"status": "success", "message": f"Deleted {filename}"})
+    return jsonify({"status": "not found"}), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
